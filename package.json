@@ -1,0 +1,14 @@
+{
+  "name": "liverpool-ps5-automation",
+  "version": "1.0.0",
+  "description": "Automatización E2E del flujo de búsqueda de PlayStation 5 en Liverpool.com.mx, con validación cruzada de respuestas de red.",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "cross-env HEADED=true playwright test",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.47.0",
+    "cross-env": "^7.0.3"
+  }
+}
