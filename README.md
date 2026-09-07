@@ -42,7 +42,7 @@ Esto abre el reporte de Playwright con resultados, capturas de pantalla (en caso
 
 El workflow en `.github/workflows/test.yml` se ejecuta en cada push/PR a `main`, corre las pruebas en modo headless, e independientemente de si pasan o fallan, sube el reporte HTML como artefacto descargable desde la pestaña **Actions** del repositorio.
 
-[![E2E Tests](https://github.com/<tu-usuario>/<tu-repo>/actions/workflows/test.yml/badge.svg)](https://github.com/<tu-usuario>/<tu-repo>/actions/workflows/test.yml)
+[![E2E Tests](https://github.com/dianaramm/reto_liverpool/actions/workflows/test.yml/badge.svg)](https://github.com/dianaramm/reto_liverpool/actions/workflows/test.yml)
 
 > Reemplaza `<tu-usuario>/<tu-repo>` por la ruta real de tu repositorio una vez publicado.
 
