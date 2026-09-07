@@ -44,7 +44,6 @@ El workflow en `.github/workflows/test.yml` se ejecuta en cada push/PR a `main`,
 
 [![E2E Tests](https://github.com/dianaramm/reto_liverpool/actions/workflows/test.yml/badge.svg)](https://github.com/dianaramm/reto_liverpool/actions/workflows/test.yml)
 
-> Reemplaza `<tu-usuario>/<tu-repo>` por la ruta real de tu repositorio una vez publicado.
 
 ## Estructura del proyecto
 

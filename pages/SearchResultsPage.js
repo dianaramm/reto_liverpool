@@ -7,17 +7,14 @@ class SearchResultsPage {
     this.sortButton = page.locator('[data-testid="dropdown-sorting-button"]');
   }
 
-  async waitForResults() {
-    await this.resultsContainer.waitFor({ state: 'visible', timeout: 20000 });
+  
+ async waitForResults() {
+    await this.productCards.first().waitFor({ state: 'visible', timeout: 20000 });
   }
+  
 
   async filterByColor(color) {
     const colorLabel = this.page.locator('label', { hasText: color }).first();
-
-    // La vista actual del sitio colapsa los filtros detrás de un botón
-    // "Filtrar" (no muestra los acordeones de Color/Precio directamente).
-    // Si ese botón existe y está visible, hay que abrirlo primero para que
-    // aparezcan los acordeones internos.
     const filterToggle = this.page.getByRole('button', { name: /^filtrar$/i });
     if (await filterToggle.isVisible().catch(() => false)) {
       await filterToggle.click();

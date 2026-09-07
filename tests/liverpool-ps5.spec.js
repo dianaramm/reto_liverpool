@@ -1,7 +1,7 @@
 const { test, expect } = require('@playwright/test');
 const { HomePage } = require('../pages/HomePage');
 const { SearchResultsPage } = require('../pages/SearchResultsPage');
-const { captureProductResponses, productsMatch } = require('../utils/networkCapture');
+const { captureProductResponses, compareProducts } = require('../utils/networkCapture');
 
 test.describe('Liverpool - Búsqueda de PlayStation 5', () => {
 
@@ -34,19 +34,44 @@ test.describe('Liverpool - Búsqueda de PlayStation 5', () => {
     console.log(`\nRespuestas de red candidatas encontradas: ${networkResponses.length}`);
     console.log(`Total de productos en red: ${networkProducts.length}`);
 
-    const matches = uiProducts.filter(uiProduct =>
-      networkProducts.some(networkProduct => productsMatch(uiProduct, networkProduct))
-    );
-
-    const mismatches = uiProducts.filter(uiProduct => !matches.includes(uiProduct));
-
-    console.log(`\nCoincidencias UI vs red: ${matches.length} de ${uiProducts.length}`);
-    if (mismatches.length > 0) {
-      console.warn('Discrepancias detectadas (presentes en UI, no confirmadas en red):');
-      console.table(mismatches);
+    if (networkResponses.length === 0) {
+      console.warn('⚠ No se encontró ninguna respuesta de red candidata con forma de lista de productos.');
     }
 
-    expect(matches.length).toBeGreaterThanOrEqual(3);
+    const nameMatches = [];
+    const priceDiscrepancies = [];
+    const notFoundInNetwork = [];
+
+    for (const uiProduct of uiProducts) {
+      const comparison = networkProducts
+        .map(networkProduct => compareProducts(uiProduct, networkProduct))
+        .find(result => result !== null);
+
+      if (!comparison) {
+        notFoundInNetwork.push(uiProduct);
+        continue;
+      }
+
+      nameMatches.push(uiProduct);
+
+      if (!comparison.priceMatches) {
+        priceDiscrepancies.push(comparison);
+      }
+    }
+
+    console.log(`\nCoincidencias de nombre UI vs red: ${nameMatches.length} de ${uiProducts.length}`);
+
+    if (notFoundInNetwork.length > 0) {
+      console.warn('Productos de UI no confirmados en la red (por nombre):');
+      console.table(notFoundInNetwork);
+    }
+
+    if (priceDiscrepancies.length > 0) {
+      console.warn('Discrepancias de PRECIO detectadas (mismo producto, precio distinto):');
+      console.table(priceDiscrepancies);
+    }
+
+    expect(nameMatches.length).toBeGreaterThanOrEqual(3);
   });
 
 });

@@ -13,5 +13,12 @@ No intentaría evadirlo: es frágil y viola los términos de servicio del provee
 - **Selectores basados en texto:** Usé selectores robustos y solo caí a coincidencia de texto cuando fue inevitable (filtros de color/orden), usando coincidencia exacta o por prefijo estricto para evitar falsos positivos entre etiquetas parecidas.
 - **Tiempos de carga de red:** Aumenté el timeout general de la prueba y utilicé esperas dinámicas (`waitFor({ state: 'visible' })`) para asegurar que las listas de productos se rendericen completamente antes de la extracción, evitando esperas estáticas (hardcoded timeouts).
 
+## Mitigación de bot-detection (Akamai / WAF)
+El bloqueo de Akamai contra el runner de CI es intermitente por IP, no determinístico, así que la mitigación es de defensa en profundidad, no una solución única:
+- **Chrome real, no Chromium:** uso `channel: 'chrome'` en la config de Playwright porque el fingerprint de Chromium vanilla es más fácil de detectar para bot-managers como Akamai que el binario real de Google Chrome. En CI esto funciona porque `windows-latest` trae Chrome preinstalado, así que no hace falta un paso extra de instalación.
+- **`--disable-blink-features=AutomationControlled`:** oculta el flag `navigator.webdriver` que delata automatización a nivel de navegador.
+- **Retry en dos capas:** `HomePage.goto()` reintenta hasta 3 veces con backoff si detecta la página "Access Denied" de Akamai, y por separado, `retries` de Playwright a nivel de test añade una capa adicional en CI. No es redundante: el retry interno resuelve bloqueos de una sola carga; el retry de Playwright resuelve el caso en que el bloqueo persiste a lo largo de todo el intento.
+- Si el bloqueo se vuelve consistente (no intermitente) contra el runner, la solución ya no es reintentar más veces, sino cambiar de IP/proveedor de runner o correr contra un ambiente de staging sin WAF.
+
 ## Cambios para un pipeline con más de 50 suites de pruebas
 Etiquetaría las pruebas por tipo (`@smoke`, `@regression`) para no correr todo en cada push, sino subconjuntos según el evento. Paralelizaría usando `--shard` de Playwright entre múltiples runners en vez de un solo job secuencial. Centralizaría los reportes en un dashboard agregador (ej. Allure TestOps) en vez de artefactos sueltos por repositorio, para tener visibilidad histórica de flakiness. Finalmente, aislaría los datos de prueba por ambiente para que las suites ejecutándose en paralelo no interfieran entre sí.

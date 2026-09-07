@@ -1,19 +1,3 @@
-/**
- * Escucha las respuestas de red durante una acción (ej. una búsqueda) y
- * devuelve aquellas que parecen contener una lista de productos.
- *
- * NOTA DE DISEÑO: Liverpool no documenta públicamente su endpoint de búsqueda,
- * y la URL exacta puede cambiar por A/B testing, CDN o versión de API. En vez
- * de hardcodear una ruta específica (frágil), usamos una heurística sobre la
- * FORMA del JSON: buscamos arreglos de objetos que tengan campos de nombre y
- * de precio. Esto es más resiliente a cambios de URL, pero debe revalidarse
- * si la estructura de datos de Liverpool cambia radicalmente.
- *
- * Antes de confiar en esto en producción, se recomienda inspeccionar una vez
- * el tráfico real en DevTools > Network para confirmar el endpoint y, si es
- * estable, restringir la búsqueda con response.url().includes('<endpoint>')
- * para mayor precisión y menor costo de parseo.
- */
 async function captureProductResponses(page, action) {
   const candidates = [];
 
@@ -31,7 +15,6 @@ async function captureProductResponses(page, action) {
         candidates.push({ url: response.url(), products });
       }
     } catch {
-      // Ignorar respuestas que no se puedan leer/parsear como JSON.
     }
   };
 
@@ -42,34 +25,41 @@ async function captureProductResponses(page, action) {
   return candidates;
 }
 
-/**
- * Busca recursivamente, dentro de una estructura JSON arbitraria, el primer
- * arreglo de objetos que "parezca" una lista de productos.
- */
-function extractProductArray(node, depth = 0) {
-  if (depth > 6 || node == null) return null;
+function collectProductArrays(node, depth, acc) {
+  if (depth > 6 || node == null) return;
 
   if (Array.isArray(node)) {
     const looksLikeProducts = node.length > 0 && node.every(
       item => item && typeof item === 'object' && hasNameAndPriceFields(item)
     );
-    if (looksLikeProducts) return node;
+
+    if (looksLikeProducts) {
+      acc.push(node);
+      return;
+    }
 
     for (const item of node) {
-      const found = extractProductArray(item, depth + 1);
-      if (found) return found;
+      collectProductArrays(item, depth + 1, acc);
     }
-    return null;
+    return;
   }
 
   if (typeof node === 'object') {
     for (const key of Object.keys(node)) {
-      const found = extractProductArray(node[key], depth + 1);
-      if (found) return found;
+      collectProductArrays(node[key], depth + 1, acc);
     }
   }
+}
 
-  return null;
+function extractProductArray(node) {
+  const candidates = [];
+  collectProductArrays(node, 0, candidates);
+
+  if (candidates.length === 0) return null;
+
+  return candidates.reduce((longest, current) =>
+    current.length > longest.length ? current : longest
+  );
 }
 
 function hasNameAndPriceFields(obj) {
@@ -79,12 +69,44 @@ function hasNameAndPriceFields(obj) {
   return hasName && hasPrice;
 }
 
-/**
- * Compara un producto extraído de la UI contra un producto de la respuesta
- * de red interceptada. Usa coincidencia parcial de nombre porque el texto
- * de la tarjeta de UI a veces trunca o formatea distinto al campo del API.
- */
-function productsMatch(uiProduct, networkProduct) {
+function getNetworkPriceRaw(networkProduct) {
+  if (networkProduct.priceInfo && typeof networkProduct.priceInfo === 'object') {
+    const info = networkProduct.priceInfo;
+    if (typeof info.salePrice === 'number') return info.salePrice;
+    if (info.promoPrice && typeof info.promoPrice.price === 'number') return info.promoPrice.price;
+    if (info.listPrice && typeof info.listPrice.price === 'number') return info.listPrice.price;
+  }
+
+  const keys = Object.keys(networkProduct);
+  const priceKeys = keys.filter(k => k.toLowerCase().includes('price'));
+
+  for (const key of priceKeys) {
+    const value = networkProduct[key];
+    if (typeof value === 'number') return value;
+    if (typeof value === 'string') return value;
+  }
+
+  return null;
+}
+
+function normalizeNetworkPrice(networkProduct) {
+  const raw = getNetworkPriceRaw(networkProduct);
+  if (raw === null || raw === undefined) return null;
+
+  if (typeof raw === 'number') return raw;
+
+  const cleaned = String(raw).replace(/,/g, '').replace(/\$/g, '').replace(/\s/g, '');
+  const parsed = parseFloat(cleaned);
+  return isNaN(parsed) ? null : parsed;
+}
+
+function normalizeUiPrice(uiPriceString) {
+  const cleaned = String(uiPriceString).replace(/\$/g, '').replace(/,/g, '');
+  const parsed = parseFloat(cleaned);
+  return isNaN(parsed) ? null : parsed;
+}
+
+function compareProducts(uiProduct, networkProduct, priceTolerance = 1) {
   const networkName = (
     networkProduct.name ||
     networkProduct.title ||
@@ -94,9 +116,38 @@ function productsMatch(uiProduct, networkProduct) {
   ).toLowerCase();
 
   const uiName = uiProduct.name.toLowerCase();
-  if (!networkName || !uiName) return false;
+  if (!networkName || !uiName) return null;
 
-  return networkName.includes(uiName.slice(0, 15)) || uiName.includes(networkName.slice(0, 15));
+  const nameMatches =
+    networkName.includes(uiName.slice(0, 15)) || uiName.includes(networkName.slice(0, 15));
+
+  if (!nameMatches) return null;
+
+  const uiPrice = normalizeUiPrice(uiProduct.price);
+  const networkPrice = normalizeNetworkPrice(networkProduct);
+
+  const priceMatches =
+    uiPrice !== null &&
+    networkPrice !== null &&
+    Math.abs(uiPrice - networkPrice) <= priceTolerance;
+
+  return {
+    name: uiProduct.name,
+    uiPrice: uiProduct.price,
+    networkPrice: networkPrice !== null ? `$${networkPrice.toFixed(2)}` : 'N/A',
+    priceMatches,
+    diff: uiPrice !== null && networkPrice !== null ? +(uiPrice - networkPrice).toFixed(2) : null,
+  };
 }
 
-module.exports = { captureProductResponses, productsMatch };
+function productsMatch(uiProduct, networkProduct) {
+  return compareProducts(uiProduct, networkProduct) !== null;
+}
+
+module.exports = {
+  captureProductResponses,
+  productsMatch,
+  compareProducts,
+  normalizeNetworkPrice,
+  normalizeUiPrice,
+};

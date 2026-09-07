@@ -8,6 +8,7 @@ module.exports = defineConfig({
   reporter: [['html'], ['list']],
   use: {
     baseURL: 'https://www.liverpool.com.mx',
+    headless: process.env.HEADED !== 'true',
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
